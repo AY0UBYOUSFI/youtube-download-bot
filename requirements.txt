@@ -1,2 +1,3 @@
 python-telegram-bot
 yt-dlp
+pyTelegramBotAPI==4.26.0
