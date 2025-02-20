@@ -1,56 +1,64 @@
-from yt_dlp import YoutubeDL, DownloadError
-import telebot
+import logging
+import yt_dlp
 from telegram import Update
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
+from telegram.ext import Updater, CommandHandler, CallbackContext
 
+# Set up logging
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+                    level=logging.INFO)
+logger = logging.getLogger(__name__)
 
+# Replace with your Telegram Bot Token
+TOKEN = '7423852571:AAFffx0oc9P0hqEagwMYwCVACSpkNyRL2nQ'
 
-TOKEN = "7423852571:AAFffx0oc9P0hqEagwMYwCVACSpkNyRL2nQ"
-
-
-
-# Function to handle the /start command
-def start(update, context):
-    update.message.reply_text("Send me a YouTube URL to download the video.")
-
-# Function to download the video
-def download_video(update, context):
-    # Get the URL from the message
-    url = update.message.text
-
-    # Configure yt-dlp options
+# Function to download the video using yt-dlp
+def download_video(url: str):
     ydl_opts = {
-        'format': 'best',  # Download the best quality video
-        'outtmpl': 'downloads/%(title)s.%(ext)s',  # Save video to the 'downloads' folder with the title as filename
-        'quiet': True,  # Suppress unnecessary output
+        'outtmpl': 'downloads/%(title)s.%(ext)s',
+        'format': 'best',
+        'noplaylist': True,
     }
-
+    
     try:
-        # Download the video using yt-dlp
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info_dict = ydl.extract_info(url, download=True)
-            video_title = info_dict.get('title', 'video')
-            video_file = f"downloads/{video_title}.mp4"  # Set the file name of the downloaded video
-            update.message.reply_text(f"Video downloaded: {video_title}")
-
-            # Send the downloaded video to the user
-            with open(video_file, 'rb') as f:
-                update.message.reply_video(f)
-
+            filename = ydl.prepare_filename(info_dict)
+            return filename
     except Exception as e:
-        update.message.reply_text(f"Failed to download video: {e}")
+        logger.error(f"Error downloading video: {e}")
+        return None
 
-# Set up the bot
+# Command handler for the /start command
+def start(update: Update, context: CallbackContext) -> None:
+    update.message.reply_text('Welcome! Send me a YouTube link to download the video.')
+
+# Command handler for downloading the video
+def download(update: Update, context: CallbackContext) -> None:
+    if context.args:
+        url = context.args[0]
+        update.message.reply_text('Downloading your video, please wait...')
+        video_file = download_video(url)
+        
+        if video_file:
+            update.message.reply_text(f'Video downloaded successfully! You can find it here: {video_file}')
+        else:
+            update.message.reply_text('Failed to download the video. Please check the URL or try again later.')
+    else:
+        update.message.reply_text('Please provide a YouTube video URL.')
+
+# Main function to set up the bot
 def main():
-    # Create an Updater object using your bot's token
+    # Create an Updater object and attach the dispatcher
     updater = Updater(TOKEN, use_context=True)
-    dp = updater.dispatcher
 
-    # Add handlers for commands and messages
-    dp.add_handler(CommandHandler("start", start))
-    dp.add_handler(MessageHandler(Filters.text & ~Filters.command, download_video))  # Handle any message that is not a command
+    # Get the dispatcher to register handlers
+    dispatcher = updater.dispatcher
 
-    # Start polling for new messages
+    # Register command handlers
+    dispatcher.add_handler(CommandHandler("start", start))
+    dispatcher.add_handler(CommandHandler("download", download))
+
+    # Start the bot
     updater.start_polling()
     updater.idle()
 
